@@ -1,0 +1,168 @@
+#include <iostream>
+#include <vector>
+#include <queue>
+#include <cstdlib>
+#include <ctime>
+#include <thread>
+#include <chrono>
+
+using namespace std;
+
+// Maze Dimensions
+const int WIDTH = 10;
+const int HEIGHT = 10;
+const double GAMMA = 0.9; // Discount factor for MDP
+
+// Maze Characters
+const char WALL = '#';
+const char PATH = ' ';
+const char EXIT = 'E';
+const char KRISHNA = 'K';
+const char DEMON = 'D';
+
+// Position structure
+struct Position {
+    int x, y;
+};
+
+// Maze Grid
+char maze[HEIGHT + 2][WIDTH + 2]; // +2 for Borders
+
+// Positions
+Position krishna, demon, exitPos;
+
+// Directions (Up, Down, Left, Right)
+int dx[] = {-1, 1, 0, 0};
+int dy[] = {0, 0, -1, 1};
+
+// Generate Random Maze with Borders
+void generateMaze() {
+    srand(time(0));
+
+    for (int i = 0; i < HEIGHT + 2; i++) {
+        for (int j = 0; j < WIDTH + 2; j++) {
+            if (i == 0 || j == 0 || i == HEIGHT + 1 || j == WIDTH + 1) {
+                maze[i][j] = WALL; // Borders
+            } else {
+                maze[i][j] = (rand() % 3 == 0) ? WALL : PATH;
+            }
+        }
+    }
+
+    // Set an exit point
+    maze[HEIGHT][WIDTH - 1] = EXIT;
+    exitPos = {HEIGHT, WIDTH - 1};
+
+    // Place Krishna and Demon
+    krishna = {1, 1};
+    demon = {1, 2};
+    maze[krishna.x][krishna.y] = KRISHNA;
+    maze[demon.x][demon.y] = DEMON;
+}
+
+// Display Maze without Colors
+void displayMaze() {
+    // Commented out to prevent errors in some environments
+    // clearScreen();
+
+    cout << "\nKrishna vs Bakasura: The Maze Escape!\n\n";
+
+    for (int i = 0; i < HEIGHT + 2; i++) {
+        for (int j = 0; j < WIDTH + 2; j++) {
+            cout << maze[i][j] << ' ';
+        }
+        cout << '\n';
+    }
+}
+
+// Check if move is valid
+bool isValid(int x, int y) {
+    return (maze[x][y] != WALL);
+}
+
+// Bellman-Ford Value Iteration for Demon's Movement
+Position getBestMove(Position demonPos) {
+    vector<vector<double>> value(HEIGHT + 2, vector<double>(WIDTH + 2, -1e9));
+    queue<Position> q;
+    value[demonPos.x][demonPos.y] = 0;
+    q.push(demonPos);
+
+    while (!q.empty()) {
+        Position current = q.front();
+        q.pop();
+
+        for (int i = 0; i < 4; i++) {
+            int nx = current.x + dx[i];
+            int ny = current.y + dy[i];
+
+            if (isValid(nx, ny) && maze[nx][ny] != KRISHNA) {
+                double reward = (maze[nx][ny] == EXIT) ? 100 : -1;
+                double newValue = reward + GAMMA * value[current.x][current.y];
+
+                if (newValue > value[nx][ny]) {
+                    value[nx][ny] = newValue;
+                    q.push({nx, ny});
+                }
+            }
+        }
+    }
+
+    // Choose Best Move
+    Position bestMove = demonPos;
+    double bestValue = -1e9;
+
+    for (int i = 0; i < 4; i++) {
+        int nx = demonPos.x + dx[i];
+        int ny = demonPos.y + dy[i];
+
+        if (isValid(nx, ny) && maze[nx][ny] != KRISHNA) {
+            if (value[nx][ny] > bestValue) {
+                bestValue = value[nx][ny];
+                bestMove = {nx, ny};
+            }
+        }
+    }
+
+    return bestMove;
+}
+
+// Move Demon Step by Step
+void moveDemon() {
+    Position newPos = getBestMove(demon);
+    if (newPos.x != demon.x || newPos.y != demon.y) {
+        maze[demon.x][demon.y] = PATH;
+        demon = newPos;
+        maze[demon.x][demon.y] = DEMON;
+    }
+}
+
+// Game Loop
+void gameLoop() {
+    while (true) {
+        displayMaze();
+
+        // Check if Krishna catches the demon
+        if (krishna.x == demon.x && krishna.y == demon.y) {
+            cout << "Krishna has purified Bakasura! You win!\n";
+            break;
+        }
+
+        // Check if Demon reaches the exit
+        if (demon.x == exitPos.x && demon.y == exitPos.y) {
+            cout << "Bakasura has escaped! You lose!\n";
+            break;
+        }
+
+        // Move Demon using MDP
+        moveDemon();
+
+        // Slow down for visibility
+        this_thread::sleep_for(chrono::milliseconds(500));
+    }
+}
+
+int main() {
+    generateMaze();
+    gameLoop();
+    return 0;
+}
